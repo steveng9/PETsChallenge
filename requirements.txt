@@ -1,0 +1,4 @@
+flwr[simulation]
+federated_fraud_detection==0.9.0
+tensorflow
+tensorflow_privacy
