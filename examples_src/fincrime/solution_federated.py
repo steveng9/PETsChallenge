@@ -15,7 +15,7 @@ from sklearn import metrics
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from federated_fraud_detection import key_gen, build_okvs, initiate_queries, randomize, combine, decrypt, finish
 
-from .model import SwiftModel
+from .model import PNSModel
 
 
 def empty_parameters() -> Parameters:
@@ -39,29 +39,29 @@ def decrypt_banks(ciphertext, nonce, key):
 
 def test_setup(server_dir: Path, client_dirs_dict: Dict[str, Path]):
     for client in client_dirs_dict.keys():
-        if client != 'swift':
+        if client != 'pns':
             key = AESGCM.generate_key(bit_length=128)
             joblib.dump(key, client_dirs_dict[client] / 'symmetric_key.joblib')
-            joblib.dump(key, client_dirs_dict["swift"] / (client + '_symmetric_key.joblib'))
+            joblib.dump(key, client_dirs_dict["pns"] / (client + '_symmetric_key.joblib'))
 
 
 # ___________________________________________________________________________________________________________
 
 
-class TrainingSwiftClient(fl.client.NumPyClient):
+class TrainingPNSClient(fl.client.NumPyClient):
     def __init__(
-        self, cid: str, swift_df: pd.DataFrame, model: SwiftModel, client_dir: Path
+        self, cid: str, pns_df: pd.DataFrame, model: PNSModel, client_dir: Path
     ):
         super().__init__()
         self.cid = cid
-        self.swift_df = swift_df
+        self.pns_df = pns_df
         self.model = model
         self.client_dir = client_dir
 
     def fit(self, parameters: List[np.ndarray], config: dict):
-        logger.info("SWIFT {}, round {}", self.cid, config["round"])
-        self.model.fit(self.swift_df)
-        logger.info("SWIFT saving model to disk...")
+        logger.info("PNS {}, round {}", self.cid, config["round"])
+        self.model.fit(self.pns_df)
+        logger.info("PNS saving model to disk...")
         self.model.save(self.client_dir)
         return [], 1, {}
 
@@ -79,12 +79,12 @@ class TrainingBankClient(fl.client.NumPyClient):
 
 
 def train_client_factory(cid, data_path: Path, client_dir: Path):
-    if cid == "swift":
-        logger.info("Initializing SWIFT client for '{}'", cid)
-        swift_df = pd.read_csv(data_path, index_col="MessageId")
-        model = SwiftModel()
-        return TrainingSwiftClient(
-            cid, swift_df=swift_df, model=model, client_dir=client_dir
+    if cid == "pns":
+        logger.info("Initializing PNS client for '{}'", cid)
+        pns_df = pd.read_csv(data_path, index_col="MessageId")
+        model = PNSModel()
+        return TrainingPNSClient(
+            cid, pns_df=pns_df, model=model, client_dir=client_dir
         )
     else:
         logger.info("Initializing bank client for {}", cid)
@@ -107,7 +107,7 @@ class TrainStrategy(fl.server.strategy.Strategy):
         config_dict = {"round": server_round}
         if server_round == 1:
             fit_ins = FitIns(parameters=empty_parameters(), config=config_dict)
-            fit_config: List[Tuple[ClientProxy, FitIns]] = [(client_dict["swift"], fit_ins)]
+            fit_config: List[Tuple[ClientProxy, FitIns]] = [(client_dict["pns"], fit_ins)]
             return fit_config
 
     def aggregate_fit(
@@ -147,12 +147,12 @@ def test_client_factory(
     preds_format_path: Path,
     preds_dest_path: Path,
 ):
-    if cid == "swift":
-        logger.info("Initializing SWIFT Test client for {}", cid)
-        swift_df = pd.read_csv(data_path, index_col="MessageId")
-        return TestSwiftClient(
+    if cid == "pns":
+        logger.info("Initializing PNS Test client for {}", cid)
+        pns_df = pd.read_csv(data_path, index_col="MessageId")
+        return TestPNSClient(
             cid,
-            swift_df=swift_df,
+            pns_df=pns_df,
             client_dir=client_dir,
             preds_format_path=preds_format_path,
             preds_dest_path=preds_dest_path,
@@ -164,18 +164,18 @@ def test_client_factory(
 
 
 
-class TestSwiftClient(fl.client.NumPyClient):
+class TestPNSClient(fl.client.NumPyClient):
     def __init__(
         self,
         cid: str,
-        swift_df: pd.DataFrame,
+        pns_df: pd.DataFrame,
         client_dir: Path,
         preds_format_path: Path,
         preds_dest_path: Path,
     ):
         super().__init__()
         self.cid = cid
-        self.swift_df = swift_df
+        self.pns_df = pns_df
         self.client_dir = client_dir
         self.preds_format_path = preds_format_path
         self.preds_dest_path = preds_dest_path
@@ -189,7 +189,7 @@ class TestSwiftClient(fl.client.NumPyClient):
         del config["round"]
 
         if round == 1:
-            raise Exception("SWIFT does not participate in round 1")
+            raise Exception("PNS does not participate in round 1")
         elif round == 2:
             # save mapping of clients to banks
             client_to_banks = {}
@@ -204,7 +204,7 @@ class TestSwiftClient(fl.client.NumPyClient):
             joblib.dump(client_to_banks, self.client_dir / 'client_to_banks.joblib')
             joblib.dump(bank_to_client, self.client_dir / 'bank_to_client.joblib')
 
-            pairs_banks = self.swift_df.loc[:,['Sender', 'Receiver']].drop_duplicates()
+            pairs_banks = self.pns_df.loc[:,['Sender', 'Receiver']].drop_duplicates()
             pairs_banks['sending_client'] = pairs_banks['Sender'].apply(lambda x: bank_to_client.get(x))
             pairs_banks['receiving_client'] = pairs_banks['Receiver'].apply(lambda x: bank_to_client.get(x))
             # don't include pairs where bank does not belong to any client
@@ -242,7 +242,7 @@ class TestSwiftClient(fl.client.NumPyClient):
             client_okvss = joblib.load(self.client_dir / 'client_okvs.joblib')
 
             # create ciphertexts for every sending/receiving client pair, and send it to them.
-            client_pairing_swift_keys = {}
+            client_pairing_pns_keys = {}
             senders = []
             receivers = []
             ciphertexts = []
@@ -253,10 +253,10 @@ class TestSwiftClient(fl.client.NumPyClient):
                 receiver_banks = client_to_banks[receiver]
                 logger.info("creating ciphertexts for {} and {}", sender, receiver)
                 pk, sk = key_gen()
-                client_pairing_swift_keys[(sender, receiver)] = (pk, sk)
+                client_pairing_pns_keys[(sender, receiver)] = (pk, sk)
                 sender_okvs = client_okvss[sender]
                 receiver_okvs = client_okvss[receiver]
-                data = self.swift_df[(self.swift_df['Sender'].isin(sender_banks)) & (self.swift_df['Receiver'].isin(receiver_banks))]
+                data = self.pns_df[(self.pns_df['Sender'].isin(sender_banks)) & (self.pns_df['Receiver'].isin(receiver_banks))]
                 sender_data = data[['OrderingAccount', 'OrderingName', 'OrderingStreet', 'OrderingCountryCityZip']].values.astype("U")
                 receiver_data = data[['BeneficiaryAccount', 'BeneficiaryName', 'BeneficiaryStreet', 'BeneficiaryCountryCityZip']].values.astype("U")
 
@@ -268,7 +268,7 @@ class TestSwiftClient(fl.client.NumPyClient):
 
             params = [np.array([pickle.dumps([senders, receivers, ciphertexts], protocol=5)])]
 
-            joblib.dump(client_pairing_swift_keys, self.client_dir / 'client_pairing_swift_keys.joblib')
+            joblib.dump(client_pairing_pns_keys, self.client_dir / 'client_pairing_pns_keys.joblib')
             return params, 1, {}
 
         elif config["okvs protocol"] == "step4":
@@ -277,7 +277,7 @@ class TestSwiftClient(fl.client.NumPyClient):
             As = []
             Bs = []
             sndr_rcvr_c_d = {}
-            logger.info("swift, step4")
+            logger.info("pns, step4")
             params = pickle.loads(parameters[0][0])
             for (sndr, rcvr, sndr_randomized, rcvr_randomized) in zip(*params):
                 a, b, c, d = combine(sndr_randomized.tolist(), rcvr_randomized.tolist())
@@ -293,47 +293,47 @@ class TestSwiftClient(fl.client.NumPyClient):
             return [np.array([pickle.dumps([senders, receivers, As, Bs], protocol=5)])], 1, {}
 
         elif config["okvs protocol"] == "step6":
-            logger.info("swift step6, finishing OKVS protocol.")
+            logger.info("pns step6, finishing OKVS protocol.")
             # Finish OKVS protocol. Now able to determine validity of transactions
             params = pickle.loads(parameters[0][0])
             sndr_rcvr_c_d = joblib.load(self.client_dir / "sndr_rcvr_c_d.joblib")
-            client_pairing_swift_keys = joblib.load(self.client_dir / 'client_pairing_swift_keys.joblib')
+            client_pairing_pns_keys = joblib.load(self.client_dir / 'client_pairing_pns_keys.joblib')
             client_to_banks = joblib.load(self.client_dir / 'client_to_banks.joblib')
-            self.swift_df['Bank_Validity'] = False # default to False if no output matched from bank client
+            self.pns_df['Bank_Validity'] = False # default to False if no output matched from bank client
 
             sndr_rcvr_outputs = {}
             for (sndr, rcvr, sndr_decrypted, rcvr_decrypted) in zip(*params):
                 pair = (sndr, rcvr)
                 c, d = sndr_rcvr_c_d[pair]
-                secret_key_for_pair = client_pairing_swift_keys[pair][1]
+                secret_key_for_pair = client_pairing_pns_keys[pair][1]
                 outputs = finish(sndr_decrypted.tolist(), rcvr_decrypted.tolist(), c, d, secret_key_for_pair)
                 sndr_rcvr_outputs[pair] = outputs
 
                 sender_banks = client_to_banks[sndr]
                 receiver_banks = client_to_banks[rcvr]
-                self.swift_df.loc[
-                    (self.swift_df['Sender'].isin(sender_banks)) & (self.swift_df['Receiver'].isin(receiver_banks)), 'Bank_Validity'
+                self.pns_df.loc[
+                    (self.pns_df['Sender'].isin(sender_banks)) & (self.pns_df['Receiver'].isin(receiver_banks)), 'Bank_Validity'
                 ] = outputs
 
             # make sure all rows received output from protocol
             joblib.dump(sndr_rcvr_outputs, self.client_dir / "outputs_from_okvs_protocol.joblib")
 
-            model = SwiftModel.load(self.client_dir)
+            model = PNSModel.load(self.client_dir)
             ensemble_df = pd.DataFrame()
-            ensemble_df['SWIFT'] = model.predict(self.swift_df)
-            ensemble_df['Bank'] = self.swift_df["Bank_Validity"].apply(lambda x: 0 if x else 1).values
-            ensemble_df['SWIFT+Bank'] = ensemble_df[['SWIFT', 'Bank']].max(axis=1)
+            ensemble_df['PNS'] = model.predict(self.pns_df)
+            ensemble_df['Bank'] = self.pns_df["Bank_Validity"].apply(lambda x: 0 if x else 1).values
+            ensemble_df['PNS+Bank'] = ensemble_df[['PNS', 'Bank']].max(axis=1)
 
 
-            print("AUPRC LGB only swift:", metrics.average_precision_score(y_true=self.swift_df["Label"].values,
-                                                                y_score=ensemble_df['SWIFT'].values))
-            print("AUPRC LGB w/ banking membership:", metrics.average_precision_score(y_true=self.swift_df["Label"].values,
-                                                                y_score=ensemble_df['SWIFT+Bank'].values))
-            print("AUPRC LGB only bank membership:", metrics.average_precision_score(y_true=self.swift_df["Label"].values,
+            print("AUPRC LGB only pns:", metrics.average_precision_score(y_true=self.pns_df["Label"].values,
+                                                                y_score=ensemble_df['PNS'].values))
+            print("AUPRC LGB w/ banking membership:", metrics.average_precision_score(y_true=self.pns_df["Label"].values,
+                                                                y_score=ensemble_df['PNS+Bank'].values))
+            print("AUPRC LGB only bank membership:", metrics.average_precision_score(y_true=self.pns_df["Label"].values,
                                                                 y_score=ensemble_df['Bank'].values))
 
             preds_format_df = pd.read_csv(self.preds_format_path, index_col="MessageId")
-            preds_format_df["Score"] = preds_format_df.assign(Score=ensemble_df['SWIFT+Bank'].values)
+            preds_format_df["Score"] = preds_format_df.assign(Score=ensemble_df['PNS+Bank'].values)
             preds_format_df.to_csv(self.preds_dest_path)
 
             return [], 1, {}
@@ -403,7 +403,7 @@ def test_strategy_factory(server_dir: Path):
 class TestStrategy(fl.server.strategy.Strategy):
     def __init__(self, server_dir: Path):
         self.server_dir = server_dir
-        self.swift_transactions_for_banks = None
+        self.pns_transactions_for_banks = None
         self.client_banks_dict = {}
         self.client_to_pk = {}
         self.client_to_okvs = {}
@@ -426,7 +426,7 @@ class TestStrategy(fl.server.strategy.Strategy):
         if server_round == 1:
             self.num_bank_clients = len(client_dict) - 1
             bank_fit_ins = FitIns(parameters=empty_parameters(), config=config_dict)
-            return [(v, bank_fit_ins) for k, v in client_dict.items() if k != "swift"]
+            return [(v, bank_fit_ins) for k, v in client_dict.items() if k != "pns"]
 
         elif server_round == 2:
             clients = []
@@ -438,9 +438,9 @@ class TestStrategy(fl.server.strategy.Strategy):
                 nonces.append(nonce)
             params = [np.array(clients), np.array(banks_encrypteds), np.array(nonces)]
             fit_ins = FitIns(parameters=fl.common.ndarrays_to_parameters(params), config=config_dict)
-            fit_config = [(client_dict["swift"], fit_ins)]
+            fit_config = [(client_dict["pns"], fit_ins)]
             for k, v in client_dict.items():
-                if k != "swift":
+                if k != "pns":
                     # wake bank by sending empty message, so they can build their OKVS
                     fit_config.append((v, FitIns(parameters=empty_parameters(), config=config_dict)))
             return fit_config
@@ -449,7 +449,7 @@ class TestStrategy(fl.server.strategy.Strategy):
             config_dict["okvs protocol"] = "step1"
             clients = sorted(client_dict.keys())
             client_chosen = clients[server_round-3]
-            logger.info("round... {}, client okvs materials being sent to swift: {}", server_round, client_chosen)
+            logger.info("round... {}, client okvs materials being sent to pns: {}", server_round, client_chosen)
             pk = self.client_to_pk[client_chosen]
             okvs = self.client_to_okvs[client_chosen]
             parameters_array = [
@@ -458,15 +458,15 @@ class TestStrategy(fl.server.strategy.Strategy):
                 okvs # okvs
             ]
             fit_ins = FitIns(parameters=fl.common.ndarrays_to_parameters(parameters_array), config=config_dict)
-            return [(client_dict["swift"], fit_ins)]
+            return [(client_dict["pns"], fit_ins)]
 
-        elif server_round - 3 == self.num_bank_clients: # here swift creates all the ciphertexts
+        elif server_round - 3 == self.num_bank_clients: # here pns creates all the ciphertexts
             config_dict["okvs protocol"] = "step2"
-            return [(client_dict["swift"], FitIns(parameters=empty_parameters(), config=config_dict))]
+            return [(client_dict["pns"], FitIns(parameters=empty_parameters(), config=config_dict))]
 
         elif server_round - 4 == self.num_bank_clients: # send ciphertexts to clients
                                    # [sender ciphers, receiver ciphers]
-            client_params = {client: [[], []] for client in client_dict.keys() if client != "swift"}
+            client_params = {client: [[], []] for client in client_dict.keys() if client != "pns"}
             fit_config = []
             config_dict["okvs protocol"] = "step3"
 
@@ -481,7 +481,7 @@ class TestStrategy(fl.server.strategy.Strategy):
                 fit_config.append((client_dict[client], fit_ins))
             return fit_config
 
-        elif server_round - 5 == self.num_bank_clients: # send randomized ciphertexts to swift
+        elif server_round - 5 == self.num_bank_clients: # send randomized ciphertexts to pns
             config_dict["okvs protocol"] = "step4"
             # pop randomized ciphers in same order as they were sent, to assure ciphers are
             # associated with correct sender/receiver pair
@@ -497,11 +497,11 @@ class TestStrategy(fl.server.strategy.Strategy):
 
             params_array = [np.array([pickle.dumps([sndrs, rcvrs, sndr_ranomizeds, rcvr_ranomizeds], protocol=5)])]
             fit_ins = FitIns(parameters=fl.common.ndarrays_to_parameters(params_array), config=config_dict)
-            return [(client_dict["swift"], fit_ins)]
+            return [(client_dict["pns"], fit_ins)]
 
         elif server_round - 6 == self.num_bank_clients: # send combined randomized parts to clients
                                    # [sender a's, receiver b's]
-            client_params = {client: [[], []] for client in client_dict.keys() if client != "swift"}
+            client_params = {client: [[], []] for client in client_dict.keys() if client != "pns"}
             fit_config = []
             config_dict["okvs protocol"] = "step5"
 
@@ -517,7 +517,7 @@ class TestStrategy(fl.server.strategy.Strategy):
                 fit_config.append((client_dict[client], fit_ins))
             return fit_config
 
-        elif server_round - 7 == self.num_bank_clients: # send penultimate_decryptions to swift
+        elif server_round - 7 == self.num_bank_clients: # send penultimate_decryptions to pns
             config_dict["okvs protocol"] = "step6"
             # pop randomized ciphers in same order as they were sent, to assure ciphers are
             # associated with correct sender/receiver pair
@@ -532,7 +532,7 @@ class TestStrategy(fl.server.strategy.Strategy):
                 rcvr_decrypteds.append(self.randomized_ciphers[rcvr][1].pop(0))
             params_array = [np.array([pickle.dumps([sndrs, rcvrs, sndr_decrypteds, rcvr_decrypteds], protocol=5)])]
             fit_ins = FitIns(parameters=fl.common.ndarrays_to_parameters(params_array), config=config_dict)
-            return [(client_dict["swift"], fit_ins)]
+            return [(client_dict["pns"], fit_ins)]
 
 
 
@@ -544,11 +544,11 @@ class TestStrategy(fl.server.strategy.Strategy):
             raise Exception(f"Had {n_failures} failures in round {server_round}")
         if server_round == 1:
             for client, result in results:
-                if client.cid != "swift":
+                if client.cid != "pns":
                     self.client_banks_dict[client.cid] = (result.metrics["message"], result.metrics["nonce"])
         elif server_round == 2:
             for client, result in results:
-                if client.cid != "swift":
+                if client.cid != "pns":
                     result_ndarrays = fl.common.parameters_to_ndarrays(result.parameters)
                     self.client_to_pk[client.cid] = result_ndarrays[0]
                     self.client_to_okvs[client.cid] = result_ndarrays[1]
@@ -556,22 +556,22 @@ class TestStrategy(fl.server.strategy.Strategy):
             pass # no messages being sent to aggregator here
         elif server_round - 3 == self.num_bank_clients:
             for client, result in results:
-                if client.cid == "swift":
+                if client.cid == "pns":
                     result_ndarrays = pickle.loads(fl.common.parameters_to_ndarrays(result.parameters)[0][0])
                     self.ciphertexts = result_ndarrays
         elif server_round - 4 == self.num_bank_clients:
             for client, result in results:
-                if client != "swift":
+                if client != "pns":
                     result_ndarrays = pickle.loads(fl.common.parameters_to_ndarrays(result.parameters)[0][0])
                     self.randomized_ciphers[client.cid] = result_ndarrays
         elif server_round - 5 == self.num_bank_clients:
             for client, result in results:
-                if client.cid == "swift":
+                if client.cid == "pns":
                     result_ndarrays = pickle.loads(fl.common.parameters_to_ndarrays(result.parameters)[0][0])
                     self.ciphertexts = result_ndarrays
         elif server_round - 6 == self.num_bank_clients:
             for client, result in results:
-                if client != "swift":
+                if client != "pns":
                     result_ndarrays = pickle.loads(fl.common.parameters_to_ndarrays(result.parameters)[0][0])
                     self.randomized_ciphers[client.cid] = result_ndarrays
 

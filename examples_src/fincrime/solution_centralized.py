@@ -8,37 +8,37 @@ from sklearn import metrics
 
 from sklearn.ensemble import RandomForestClassifier
 
-SWIFT_COLS = ['InterimTime', 'InstructedAmount', 'SameCurrency', 'difference_days_absolute']
+COLS = ['InterimTime', 'InstructedAmount', 'SameCurrency', 'difference_days_absolute']
 
 
-def extract_swift_features(swift_df: pd.DataFrame):
+def extract_pns_features(pns_df: pd.DataFrame):
 
-    logger.info("Swift feature extraction : hour")
+    logger.info("feature extraction : hour")
     # hour
-    swift_df["Timestamp"] = swift_df["Timestamp"].astype("datetime64[ns]")
+    pns_df["Timestamp"] = pns_df["Timestamp"].astype("datetime64[ns]")
 
-    logger.info("Swift feature extraction: InterimTime")
-    swift_df["SettlementDate"] = swift_df["SettlementDate"].apply(lambda date: datetime.strptime(str(date), "%y%m%d")).astype("datetime64[ns]")
-    swift_df["InterimTime"] = swift_df[["Timestamp", "SettlementDate"]].apply(lambda x: (x.SettlementDate - x.Timestamp).total_seconds(), axis=1)
+    logger.info("feature extraction: InterimTime")
+    pns_df["SettlementDate"] = pns_df["SettlementDate"].apply(lambda date: datetime.strptime(str(date), "%y%m%d")).astype("datetime64[ns]")
+    pns_df["InterimTime"] = pns_df[["Timestamp", "SettlementDate"]].apply(lambda x: (x.SettlementDate - x.Timestamp).total_seconds(), axis=1)
 
-    logger.info("Swift feature extraction: Difference in days (abs)")
-    swift_df['SettlementDate'] = swift_df['SettlementDate'].astype("datetime64[ns]")
-    swift_df['difference_days_absolute'] = abs(swift_df['SettlementDate'].dt.day - pd.to_datetime(swift_df['Timestamp']).dt.day)
+    logger.info("feature extraction: Difference in days (abs)")
+    pns_df['SettlementDate'] = pns_df['SettlementDate'].astype("datetime64[ns]")
+    pns_df['difference_days_absolute'] = abs(pns_df['SettlementDate'].dt.day - pd.to_datetime(pns_df['Timestamp']).dt.day)
 
-    logger.info("Swift feature extraction: SameCurrency")
-    swift_df['SameCurrency'] = (swift_df['SettlementCurrency'] == swift_df['InstructedCurrency'])
+    logger.info("feature extraction: SameCurrency")
+    pns_df['SameCurrency'] = (pns_df['SettlementCurrency'] == pns_df['InstructedCurrency'])
 
 
-def fit(swift_data_path: Path, bank_data_path: Path, model_dir: Path):
+def fit(pns_data_path: Path, bank_data_path: Path, model_dir: Path):
 
     logger.info("Loading data...")
-    swift_df = pd.read_csv(swift_data_path)
+    pns_df = pd.read_csv(pns_data_path)
 
-    extract_swift_features(swift_df)
+    extract_pns_features(pns_df)
 
-    logger.info("Swift local training")
-    Y_train = swift_df["Label"].values
-    X_train = swift_df[SWIFT_COLS].values
+    logger.info("local training")
+    Y_train = pns_df["Label"].values
+    X_train = pns_df[COLS].values
 
     RF_clf = RandomForestClassifier(n_estimators=10, max_depth=10)
     RF_clf.fit(X_train, Y_train)
@@ -48,7 +48,7 @@ def fit(swift_data_path: Path, bank_data_path: Path, model_dir: Path):
 
 
 def predict(
-        swift_data_path: Path,
+        pns_data_path: Path,
         bank_data_path: Path,
         model_dir: Path,
         preds_format_path: Path,
@@ -56,15 +56,15 @@ def predict(
 ):
 
     logger.info("Loading data...")
-    swift_df = pd.read_csv(swift_data_path)
+    pns_df = pd.read_csv(pns_data_path)
     bank_df = pd.read_csv(bank_data_path)
 
-    extract_swift_features(swift_df)
+    extract_pns_features(pns_df)
 
-    logger.info("Swift local inference")
-    X_test_SWIFT = swift_df[SWIFT_COLS].values
+    logger.info("local inference")
+    X_test_PNS = pns_df[COLS].values
     RF_clf = joblib.load(model_dir / "RF_clf.joblib")
-    pred_proba_rf = RF_clf.predict_proba(X_test_SWIFT)[:, 1]
+    pred_proba_rf = RF_clf.predict_proba(X_test_PNS)[:, 1]
 
     # ________________________________________________________________________
 
@@ -98,17 +98,17 @@ def predict(
     # ________________________________________________________________________
 
     # General final predictions
-    logger.info("taking maximum of swift predictions and bank check")
+    logger.info("taking maximum of PNS predictions and bank check")
     ensemble_df = pd.DataFrame()
-    ensemble_df['SWIFT'] = pred_proba_rf
-    ensemble_df['Bank'] = swift_df.apply(check_with_bank_info, axis=1)
-    ensemble_df['SWIFT+Bank'] = ensemble_df[['Bank', 'SWIFT']].max(axis=1)
-    # print("AUPRC RF:", metrics.average_precision_score(y_true=swift_df["Label"].values, y_score=ensemble_df['SWIFT'].values))
-    # print("AUPRC RF:", metrics.average_precision_score(y_true=swift_df["Label"].values, y_score=ensemble_df['SWIFT+Bank'].values))
+    ensemble_df['PNS'] = pred_proba_rf
+    ensemble_df['Bank'] = pns_df.apply(check_with_bank_info, axis=1)
+    ensemble_df['PNS+Bank'] = ensemble_df[['Bank', 'PNS']].max(axis=1)
+    # print("AUPRC RF:", metrics.average_precision_score(y_true=pns_df["Label"].values, y_score=ensemble_df['PNS'].values))
+    # print("AUPRC RF:", metrics.average_precision_score(y_true=pns_df["Label"].values, y_score=ensemble_df['PNS+Bank'].values))
 
     preds_format_df = pd.read_csv(preds_format_path, index_col="MessageId")
-    preds_format_df = preds_format_df.assign(Score=ensemble_df['SWIFT+Bank'].values)
+    preds_format_df = preds_format_df.assign(Score=ensemble_df['PNS+Bank'].values)
 
-    logger.info("Writing out swift_df predictions...")
+    logger.info("Writing out pns_df predictions...")
     preds_format_df.to_csv(preds_dest_path)
     logger.info("Done.")
