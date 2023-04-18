@@ -135,14 +135,14 @@ class FederatedSupervisor:
     def get_predictions_format_path(self, cid: str):
         if self.base_predictions_dir is None:
             raise Exception("Shouldn't get predictions format path if not test")
-        if os.environ.get("SUBMISSION_TRACK") == "fincrime" and cid != "swift":
+        if os.environ.get("SUBMISSION_TRACK") == "fincrime" and cid != "pns":
             return None
         return self.get_client_data_dir(cid) / f"predictions_format.csv"
 
     def get_predictions_dest_path(self, cid: str):
         if self.base_predictions_dir is None:
             raise Exception("Shouldn't get predictions dest path if not test")
-        if os.environ.get("SUBMISSION_TRACK") == "fincrime" and cid != "swift":
+        if os.environ.get("SUBMISSION_TRACK") == "fincrime" and cid != "pns":
             return None
         return self.base_predictions_dir / f"{cid}.csv"
 
