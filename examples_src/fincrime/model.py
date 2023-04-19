@@ -19,8 +19,8 @@ from examples_src.fincrime.diffprivlib.quantiles import percentile
 from examples_src.fincrime.diffprivlib.tools_utils import mean
 
 
-COLS = ['SameCurrency']
-# SCALER_COLS = ['InstructedAmount', 'difference_days_absolute']
+PNS_COLS = ['SameCurrency']
+# SCALER_PNS_COLS = ['InstructedAmount', 'difference_days_absolute']
 # CLIPS = {'InterimTime': 4000000, 'InstructedAmount': 2 * 10 ** 12, 'difference_days_absolute': 60}
 BIN_GRANULARITY = 40
 
@@ -40,7 +40,7 @@ class PNSModel:
         encoder_df["SameCurrency"] = np.asarray(train["SameCurrency"]).astype(np.int64)
 
         Y_train = train["Label"].values
-        X_train = encoder_df[COLS + list(range(BIN_GRANULARITY * 2 + 3))].values
+        X_train = encoder_df[PNS_COLS + list(range(BIN_GRANULARITY * 2 + 3))].values
 
         self.mlp_model = fit_dp(X_train, Y_train, 5.0)
 
@@ -53,7 +53,7 @@ class PNSModel:
 
         # normalize_DP_test(test, self.dp_means)
 
-        X_test = encoder_df[COLS + list(range(BIN_GRANULARITY * 2 + 3))].values
+        X_test = encoder_df[PNS_COLS + list(range(BIN_GRANULARITY * 2 + 3))].values
 
         self.mlp_model.compile(loss='binary_crossentropy', optimizer='Adam', metrics=['accuracy', 'auc'])
         pred_proba = self.mlp_model.predict(X_test).flatten()
@@ -97,12 +97,12 @@ class PNSModel:
 #     e_num = 0.03
 #     e_den = 0.003
 #
-#     for f in SCALER_COLS:
+#     for f in SCALER_PNS_COLS:
 #         pns_df[f] = pns_df[f].apply(lambda x: x if x < CLIPS[f] else CLIPS[f])
 #     logger.info("Done clipping.")
 #
 #     dp_means = {}
-#     for f in SCALER_COLS:
+#     for f in SCALER_PNS_COLS:
 #         dp_means[f] = (np.sum(pns_df[f]) + np.random.default_rng().laplace(CLIPS[f] / e_num)) / (n + np.random.default_rng().laplace(1 / e_den))
 #         pns_df[f] = pns_df[f] / dp_means[f]
 #
@@ -114,12 +114,12 @@ class PNSModel:
 #     logger.info("clipping values for DP normalization!")
 #     # choose clip values
 #
-#     for f in SCALER_COLS:
+#     for f in SCALER_PNS_COLS:
 #         pns_df[f] = pns_df[f].apply(lambda x: x if x < CLIPS[f] else CLIPS[f])
 #     logger.info("Done clipping.")
 #
 #     # use means constructed from train
-#     for f in SCALER_COLS:
+#     for f in SCALER_PNS_COLS:
 #         pns_df[f] = pns_df[f] / dp_means[f]
 #
 #     pns_df["SameCurrency"] = np.asarray(pns_df["SameCurrency"]).astype(np.int64)

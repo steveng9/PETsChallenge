@@ -8,7 +8,7 @@ from sklearn import metrics
 
 from sklearn.ensemble import RandomForestClassifier
 
-COLS = ['InterimTime', 'InstructedAmount', 'SameCurrency', 'difference_days_absolute']
+PNS_COLS = ['InterimTime', 'InstructedAmount', 'SameCurrency', 'difference_days_absolute']
 
 
 def extract_pns_features(pns_df: pd.DataFrame):
@@ -38,7 +38,7 @@ def fit(pns_data_path: Path, bank_data_path: Path, model_dir: Path):
 
     logger.info("local training")
     Y_train = pns_df["Label"].values
-    X_train = pns_df[COLS].values
+    X_train = pns_df[PNS_COLS].values
 
     RF_clf = RandomForestClassifier(n_estimators=10, max_depth=10)
     RF_clf.fit(X_train, Y_train)
@@ -62,7 +62,7 @@ def predict(
     extract_pns_features(pns_df)
 
     logger.info("local inference")
-    X_test_PNS = pns_df[COLS].values
+    X_test_PNS = pns_df[PNS_COLS].values
     RF_clf = joblib.load(model_dir / "RF_clf.joblib")
     pred_proba_rf = RF_clf.predict_proba(X_test_PNS)[:, 1]
 
