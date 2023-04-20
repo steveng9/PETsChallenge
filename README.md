@@ -6,7 +6,8 @@ Anomalous Financial Transactions
 ------------------------------------------------------------------------
 
 This repository holds the code written by the PPMLHuskies for the 2nd Place solution in [the PETs Prize Challenge, Track A](https://www.drivendata.org/competitions/group/nist-federated-learning/). 
-The technical report for our solution can be found [here](). 
+The technical report for our solution can be found [here](2023_Open_Source_Technical_Report_US_UK_PETs_Prize_.pdf). 
+
 
 # Description
 
@@ -357,3 +358,7 @@ The model we train is itself differentially private. We use DP-SGD from
 
 -   `validation.py` : implementation from `diffprivlib` for making the
     feature engineering process differentially private
+
+# License 
+
+Our code is released under the Apache licence.
