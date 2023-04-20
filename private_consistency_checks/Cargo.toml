@@ -1,0 +1,25 @@
+[package]
+name = "private-consistency-checks"
+authors = ["Jelle Vos"]
+version = "0.10.0"
+description = "WIP: Elliptic curve-based protocol for checking transactions' consistency among multiple banks."
+edition = "2021"
+license = "MIT"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+name = "private_consistency_checks"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.17.3", features = ["extension-module"] }
+curve25519-dalek = { path = "curve25519-dalek-main", features = ["rand_core", "digest"] } #version = "4.0.0-pre.5",
+rand = "0.8"
+okvs = "0.2"
+subtle = "2.4"
+rayon = "1.6"
+
+[profile.release]
+codegen-units = 1
+lto = true
+strip = true
