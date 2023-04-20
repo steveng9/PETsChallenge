@@ -13,7 +13,7 @@ import joblib
 import pickle
 from sklearn import metrics
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from federated_fraud_detection import key_gen, build_okvs, initiate_queries, randomize, combine, decrypt, finish
+from private_consistency_checks import key_gen, build_okvs, initiate_queries, randomize, combine, decrypt, finish
 
 from .model import PNSModel
 
