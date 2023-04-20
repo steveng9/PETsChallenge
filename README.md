@@ -73,15 +73,15 @@ bank clients.
 -   diffprivlib : the implementations from this package are used to
     compute feature boundaries using differential privacy
 
--   federated_fraud_detection : this is the package we've developed that
+-   private_consistency_checks : this is the package we've developed that
     allows for a multi-round homomorphic encryption protocol to carry
     out private feature extraction between the PNS client and the banks.
 
-**Low-level cryptographic protocols in `federated_fraud_detection`**\
+**Low-level cryptographic protocols in `private_consistency_checks`**\
 Our cryptographic protocols are implemented in pure Rust. The library is
 designed to be highly-portable yet efficient. Internally, it relies on
 the `okvs` crate to realize the OKVS. We ship a pre-built MIT-licensed
-Python wrapper around our protocols called `federated_fraud_detection`,
+Python wrapper around our protocols called `private_consistency_checks`,
 which implements the following functionality:
 
 -   `key_gen`: Generates a key pair for this party (PNS or a node),
