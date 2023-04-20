@@ -332,33 +332,6 @@ The model we train is itself differentially private. We use DP-SGD from
 -   `install.sh` : for installing the `federated_fraud_detection`
     package.
 
--   `base.py` : implementation from `diffprivlib` for making the feature
-    engineering process differentially private
-
--   `binary.py` : implementation from `diffprivlib` for making the
-    feature engineering process differentially private
-
--   `exponential.py` : implementation from `diffprivlib` for making the
-    feature engineering process differentially private
-
--   `geometric.py` : implementation from `diffprivlib` for making the
-    feature engineering process differentially private
-
--   `laplace.py` : implementation from `diffprivlib` for making the
-    feature engineering process differentially private
-
--   `quantiles.py` : implementation from `diffprivlib` for making the
-    feature engineering process differentially private
-
--   `tools_utils.py` : implementation from `diffprivlib` for making the
-    feature engineering process differentially private
-
--   `utils.py` : implementation from `diffprivlib` for making the
-    feature engineering process differentially private
-
--   `validation.py` : implementation from `diffprivlib` for making the
-    feature engineering process differentially private
-
 # License 
 
 Our code is released under the Apache licence.
